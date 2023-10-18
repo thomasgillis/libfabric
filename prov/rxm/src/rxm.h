@@ -296,14 +296,15 @@ struct rxm_cntr {
 	struct fid_cntr *msg_cntr;
 };
 
-
 struct rxm_mr {
-	struct fid_mr mr_fid;
-	struct fid_mr *msg_mr;
-	struct rxm_domain *domain;
-	enum fi_hmem_iface iface;
-	uint64_t device;
-	ofi_mutex_t amo_lock;
+    struct fid_mr mr_fid;
+    struct fid_mr *msg_mr;
+    struct rxm_domain *domain;
+    enum fi_hmem_iface iface;
+    uint64_t device;
+    void *hmem_handle;
+    uint64_t hmem_flags;
+    ofi_mutex_t amo_lock;
 };
 
 static inline enum fi_hmem_iface
@@ -773,6 +774,17 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      const struct iovec *iov, size_t count,
 			      struct fid_mr **mr);
 
+ssize_t rxm_copy_hmem(void *desc, char *host_buf, void *dev_buf, size_t size, int dir);
+ssize_t rxm_copy_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
+                          int iov_count, int dir);
+static ssize_t rxm_copy_from_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
+                               int iov_count) {
+    return rxm_copy_hmem_iov(desc, buf, buf_size, hmem_iov, iov_count, OFI_COPY_IOV_TO_BUF);
+}
+static ssize_t rxm_copy_to_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
+                             int iov_count) {
+    return rxm_copy_hmem_iov(desc, buf, buf_size, hmem_iov, iov_count, OFI_COPY_BUF_TO_IOV);
+}
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {

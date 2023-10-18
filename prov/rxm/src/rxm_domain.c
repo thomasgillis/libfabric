@@ -447,8 +447,13 @@ static int rxm_mr_close(fid_t fid)
 	if (rxm_mr->domain->util_domain.info_domain_caps & FI_ATOMIC)
 		rxm_mr_remove_map_entry(rxm_mr);
 
+	// release the gdrcopy if present
+	if (rxm_mr->hmem_handle) {
+		ofi_hmem_dev_unregister(rxm_mr->iface, (uint64_t)rxm_mr->hmem_handle);
+	}
+
 	ret = fi_close(&rxm_mr->msg_mr->fid);
-	if (ret)
+    if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to close MSG MR\n");
 
 	ofi_atomic_dec32(&rxm_mr->domain->util_domain.ref);
@@ -544,6 +549,8 @@ static void rxm_mr_init(struct rxm_mr *rxm_mr, struct rxm_domain *domain,
 	rxm_mr->mr_fid.mem_desc = rxm_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
 	rxm_mr->domain = domain;
+	rxm_mr->hmem_flags = 0x0;
+	rxm_mr->hmem_handle = NULL;
 	ofi_atomic_inc32(&domain->util_domain.ref);
 }
 
@@ -589,6 +596,17 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	rxm_mr->device = msg_attr.device.reserved;
 	*mr = &rxm_mr->mr_fid;
 
+	// get the GDR copy registration if possible, inspired from efa_mr_hmem_setup
+	if (cuda_is_gdrcopy_enabled()) {
+		int gdrerr = ofi_hmem_dev_register(rxm_mr->iface, attr->mr_iov->iov_base,
+										   attr->mr_iov->iov_len, (uint64_t *)&rxm_mr->hmem_handle);
+		if (!gdrerr) {
+			rxm_mr->hmem_flags = OFI_HMEM_DATA_GDRCOPY_HANDLE;
+		} else {
+			rxm_mr->hmem_flags = 0x0;
+			rxm_mr->hmem_handle = NULL;
+		}
+	}
 	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
 		ret = rxm_mr_add_map_entry(&rxm_domain->util_domain,
 					   &msg_attr, rxm_mr);
