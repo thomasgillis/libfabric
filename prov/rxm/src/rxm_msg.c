@@ -446,8 +446,7 @@ rxm_send_segment(struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 	}
 
-	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, seg_len, iface, device,
-				     iov, count, *iov_offset);
+	ret = rxm_copy_from_hmem_iov(iov_desc, tx_buf->pkt.data, seg_len, iov, count, *iov_offset);
 	assert((size_t) ret == seg_len);
 
 	*iov_offset += seg_len;
@@ -482,9 +481,9 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (!first_tx_buf)
 		return -FI_EAGAIN;
 
-	ret = ofi_copy_from_hmem_iov(first_tx_buf->pkt.data, rxm_buffer_size,
-				     iface, device, iov, count, iov_offset);
-	assert((size_t) ret == rxm_buffer_size);
+    ret = rxm_copy_from_hmem_iov(desc, first_tx_buf->pkt.data, rxm_buffer_size, iov, count,
+                                 iov_offset);
+    assert((size_t) ret == rxm_buffer_size);
 
 	iov_offset += rxm_buffer_size;
 
@@ -673,12 +672,8 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &eager_buf->pkt);
 
-		// iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
-		// ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
-		// 			     eager_buf->pkt.hdr.size,
-		// 			     iface, device, iov, count, 0);
-        ret =
-            rxm_copy_from_hmem_iov(desc, eager_buf->pkt.data, eager_buf->pkt.hdr.size, iov, count);
+        ret = rxm_copy_from_hmem_iov(desc, eager_buf->pkt.data, eager_buf->pkt.hdr.size, iov, count,
+                                     0);
         assert((size_t)ret == eager_buf->pkt.hdr.size);
         ret = fi_send(rxm_conn->msg_ep, &eager_buf->pkt, total_len,
 			      eager_buf->hdr.desc, 0, eager_buf);

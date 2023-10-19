@@ -374,20 +374,24 @@ static int rxm_rx_buf_match_msg_id(struct dlist_entry *item, const void *arg)
 
 static void rxm_process_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 {
-	enum fi_hmem_iface iface;
-	uint64_t device;
+	// enum fi_hmem_iface iface;
+	// uint64_t device;
 	ssize_t done_len;
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
-					      rx_buf->recv_entry->rxm_iov.count,
-					      &device);
-
-	done_len = ofi_copy_to_hmem_iov(iface, device,
-					rx_buf->recv_entry->rxm_iov.iov,
-					rx_buf->recv_entry->rxm_iov.count,
-					rx_buf->recv_entry->sar.total_recv_len,
-					rx_buf->pkt.data,
-					rx_buf->pkt.ctrl_hdr.seg_size);
+	// iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
+	// 				      rx_buf->recv_entry->rxm_iov.count,
+	// 				      &device);
+	//
+	// done_len = ofi_copy_to_hmem_iov(iface, device,
+	// 				rx_buf->recv_entry->rxm_iov.iov,
+	// 				rx_buf->recv_entry->rxm_iov.count,
+	// 				rx_buf->recv_entry->sar.total_recv_len,
+	// 				rx_buf->pkt.data,
+	// 				rx_buf->pkt.ctrl_hdr.seg_size);
+	done_len = rxm_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.desc, rx_buf->pkt.data,
+									rx_buf->pkt.ctrl_hdr.seg_size, rx_buf->recv_entry->rxm_iov.iov,
+									rx_buf->recv_entry->rxm_iov.count,
+									rx_buf->recv_entry->sar.total_recv_len);
 	assert(done_len == rx_buf->pkt.ctrl_hdr.seg_size);
 
 	rx_buf->recv_entry->sar.total_recv_len += done_len;
@@ -624,21 +628,10 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 
 void rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 {
-	// enum fi_hmem_iface iface;
-	// uint64_t device;
-	ssize_t done_len;
-
-	// iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
-	// 				      rx_buf->recv_entry->rxm_iov.count,
-	// 				      &device);
-	//
-	// done_len = ofi_copy_to_hmem_iov(iface, device,
-	// 				rx_buf->recv_entry->rxm_iov.iov,
-	// 				rx_buf->recv_entry->rxm_iov.count, 0,
-	// 				rx_buf->data, rx_buf->pkt.hdr.size);
-    done_len = rxm_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.desc, rx_buf->data, rx_buf->pkt.hdr.size,
-                         rx_buf->recv_entry->rxm_iov.iov, rx_buf->recv_entry->rxm_iov.count);
-    assert((size_t)done_len == rx_buf->pkt.hdr.size);
+	ssize_t done_len =
+		rxm_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.desc, rx_buf->data, rx_buf->pkt.hdr.size,
+							 rx_buf->recv_entry->rxm_iov.iov, rx_buf->recv_entry->rxm_iov.count, 0);
+	assert((size_t)done_len == rx_buf->pkt.hdr.size);
 
     rxm_finish_recv(rx_buf, done_len);
 }
