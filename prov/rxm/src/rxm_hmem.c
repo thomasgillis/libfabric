@@ -3,23 +3,29 @@
 /**
  * @brief copy list of IOVs from/to the host to/from an hmem device
  *
- * inspired by efa_copy_from/to_hmem_iov
+ * @param buf       host buffer address
+ * @param buf_size  size of the host buffer
+ * @param hmem_iov  list of IOVs on the device
+ * @param iov_count number of IOVs in the list
+ * @param iov_offset offset in bytes in the IOVs struct (cummulative over IOVs)
+ *
+ * note: inspired by efa_copy_from/to_hmem_iov
  */
-ssize_t rxm_copy_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
-                          int iov_count, int dir) {
+ssize_t rxm_copy_hmem_iov(void **desc, char *buf, size_t buf_size, const struct iovec *hmem_iov,
+                          int iov_count, size_t iov_offset, int dir) {
     int i, ret = -1;
-    size_t data_size = 0;
+    ssize_t data_size = 0;
 
     for (i = 0; i < iov_count; i++) {
-        if (data_size + hmem_iov[i].iov_len > buf_size) {
-            return -FI_ETRUNC;
-        }
+        char *hmem_buf;
+        void *local_desc = (desc) ? desc[i] : NULL;
+        size_t len = ofi_iov_bytes_to_copy(hmem_iov + i, &buf_size, &iov_offset, &hmem_buf);
+        if(!len) continue;
 
-        ret =
-            rxm_copy_hmem(desc[i], buf + data_size, hmem_iov[i].iov_base, hmem_iov[i].iov_len, dir);
-        if (ret < 0) return ret;
+        ret = rxm_copy_hmem(local_desc, buf + data_size, hmem_buf, len, dir);
+        if (ret) return ret;
 
-        data_size += hmem_iov[i].iov_len;
+        data_size += len;
     }
     return data_size;
 }
@@ -27,7 +33,7 @@ ssize_t rxm_copy_hmem_iov(void **desc, char *buf, int buf_size, const struct iov
 /**
  * @brief copy data from/to the host to/from an hmem device
  *
- * inspired by efa_copy_from/to_hmem
+ * note: inspired by efa_copy_from/to_hmem
  */
 ssize_t rxm_copy_hmem(void *desc, char *host_buf, void *dev_buf, size_t size, int dir) {
     uint64_t device = 0, flags = 0;

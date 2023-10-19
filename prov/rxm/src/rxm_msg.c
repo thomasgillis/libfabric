@@ -423,7 +423,7 @@ rxm_send_segment(struct rxm_ep *rxm_ep,
 		 struct rxm_conn *rxm_conn, void *app_context, size_t data_len,
 		 size_t remain_len, uint64_t msg_id, size_t seg_len,
 		 size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
-		 uint64_t tag, uint8_t op, const struct iovec *iov,
+		 uint64_t tag, uint8_t op, const struct iovec *iov, void** iov_desc,
 		 uint8_t count, size_t *iov_offset,
 		 struct rxm_tx_buf **out_tx_buf,
 		 enum fi_hmem_iface iface, uint64_t device)
@@ -503,7 +503,7 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	for (i = 1; i < segs_cnt; i++) {
 		ret = rxm_send_segment(rxm_ep, rxm_conn, context, data_len,
 				       remain_len, msg_id, rxm_buffer_size, i,
-				       segs_cnt, data, flags, tag, op, iov,
+				       segs_cnt, data, flags, tag, op, iov, desc,
 				       count, &iov_offset, &tx_buf, iface,
 				       device);
 		if (ret) {
@@ -527,8 +527,8 @@ defer:
 			rxm_free_tx_buf(rxm_ep, tx_buf);
 		return -FI_ENOMEM;
 	}
-	memcpy(def_tx->sar_seg.payload.iov,
-		iov, sizeof(*iov) * count);
+	memcpy(def_tx->sar_seg.payload.iov, iov, sizeof(*iov) * count);
+	memcpy(def_tx->sar_seg.payload.iov_desc, desc, sizeof(*desc) * count);
 	def_tx->sar_seg.payload.count = count;
 	def_tx->sar_seg.payload.cur_iov_offset = iov_offset;
 	def_tx->sar_seg.payload.tag = tag;

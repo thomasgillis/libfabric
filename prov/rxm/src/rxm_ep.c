@@ -821,6 +821,7 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 				def_tx_entry->sar_seg.payload.tag,
 				def_tx_entry->sar_seg.op,
 				def_tx_entry->sar_seg.payload.iov,
+				def_tx_entry->sar_seg.payload.iov_desc,
 				def_tx_entry->sar_seg.payload.count,
 				&def_tx_entry->sar_seg.payload.cur_iov_offset,
 				&def_tx_entry->sar_seg.cur_seg_tx_buf,

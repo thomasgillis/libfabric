@@ -567,6 +567,7 @@ struct rxm_deferred_tx_entry {
 			struct rxm_tx_buf *cur_seg_tx_buf;
 			struct {
 				struct iovec iov[RXM_IOV_LIMIT];
+				void *iov_desc[RXM_IOV_LIMIT];
 				uint8_t count;
 				size_t cur_iov_offset;
 				uint64_t data;
@@ -775,15 +776,19 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      struct fid_mr **mr);
 
 ssize_t rxm_copy_hmem(void *desc, char *host_buf, void *dev_buf, size_t size, int dir);
-ssize_t rxm_copy_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
-                          int iov_count, int dir);
-static ssize_t rxm_copy_from_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
-                               int iov_count) {
-    return rxm_copy_hmem_iov(desc, buf, buf_size, hmem_iov, iov_count, OFI_COPY_IOV_TO_BUF);
+ssize_t rxm_copy_hmem_iov(void **desc, char *buf, size_t buf_size, const struct iovec *hmem_iov,
+                          int iov_count, size_t iov_offset, int dir);
+static inline ssize_t rxm_copy_from_hmem_iov(void **desc, char *buf, size_t buf_size,
+                                      const struct iovec *hmem_iov, int iov_count,
+                                      size_t iov_offset) {
+    return rxm_copy_hmem_iov(desc, buf, buf_size, hmem_iov, iov_count, iov_offset,
+                             OFI_COPY_IOV_TO_BUF);
 }
-static ssize_t rxm_copy_to_hmem_iov(void **desc, char *buf, int buf_size, const struct iovec *hmem_iov,
-                             int iov_count) {
-    return rxm_copy_hmem_iov(desc, buf, buf_size, hmem_iov, iov_count, OFI_COPY_BUF_TO_IOV);
+static inline ssize_t rxm_copy_to_hmem_iov(void **desc, char *buf, int buf_size,
+                                    const struct iovec *hmem_iov, int iov_count,
+                                    size_t iov_offset) {
+    return rxm_copy_hmem_iov(desc, buf, buf_size, hmem_iov, iov_count, iov_offset,
+                             OFI_COPY_BUF_TO_IOV);
 }
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
@@ -921,7 +926,7 @@ rxm_send_segment(struct rxm_ep *rxm_ep,
 		 struct rxm_conn *rxm_conn, void *app_context, size_t data_len,
 		 size_t remain_len, uint64_t msg_id, size_t seg_len,
 		 size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
-		 uint64_t tag, uint8_t op, const struct iovec *iov,
+		 uint64_t tag, uint8_t op, const struct iovec *iov, void** iov_desc,
 		 uint8_t count, size_t *iov_offset,
 		 struct rxm_tx_buf **out_tx_buf,
 		 enum fi_hmem_iface iface, uint64_t device);
