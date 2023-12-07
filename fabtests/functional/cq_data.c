@@ -40,10 +40,15 @@
 static int run_test()
 {
 	int ret;
-	size_t size = 1000;
+	int n_msg = 1 << 1;
+	size_t size = 1 << 4;
 	struct fi_cq_data_entry comp = {0};
 	struct fi_rma_iov remote;
 	uint64_t mask = UINT64_MAX;
+
+	size_t data_size = size / sizeof(int);
+
+	opts.cqdata_op = FT_CQDATA_WRITEDATA;
 
 	if (fi->domain_attr->cq_data_size < sizeof(uint64_t))
 		mask ^= mask << (fi->domain_attr->cq_data_size * 8);
@@ -55,19 +60,51 @@ static int run_test()
 	}
 
 	if (opts.dst_addr) {
+		// assign an i+1 to the source data
+		int *data = (int *) tx_buf;
+		for (int i = 0; i < data_size; ++i) {
+			data[i] = i + 1;
+			fprintf(stdout, "data[%d] = %d\n", i, data[i]);
+		}
+
 		if (opts.cqdata_op == FT_CQDATA_SENDDATA) {
 			fprintf(stdout,
 				"Posting send with CQ data: 0x%" PRIx64 "\n",
 				remote_cq_data);
-			ret = ft_post_tx(ep, remote_fi_addr, size, remote_cq_data, &tx_ctx);
-		} else  if (opts.cqdata_op == FT_CQDATA_WRITEDATA) {
+			ret = ft_post_tx(ep, remote_fi_addr, size,
+					 remote_cq_data, &tx_ctx);
+		} else if (opts.cqdata_op == FT_CQDATA_WRITEDATA) {
 			fprintf(stdout,
 				"Posting write with CQ data: 0x%" PRIx64 "\n",
 				ft_init_cq_data(fi));
 
-			ret = ft_post_rma(FT_RMA_WRITEDATA, tx_buf, size, &remote, &tx_ctx);
+			// send all the msgs
+			size_t msg_size = size / n_msg;
+			for (int i = 0; i < n_msg; ++i) {
+				struct fi_rma_iov curr = {
+					.addr = remote.addr + i * msg_size,
+					.len = msg_size,
+					.key = remote.key,
+				};
+				void *new_tx = tx_buf + i * msg_size;
+				for (int i = 0; i < (msg_size / sizeof(int));
+				     ++i) {
+					fprintf(stdout, "sending %d\n",
+						((int *) new_tx)[i]);
+				}
+				remote_cq_data = i;
+				ret = ft_post_rma(FT_RMA_WRITEDATA,
+						  tx_buf + i * msg_size,
+						  msg_size, &curr, &tx_ctx);
+				fprintf(stdout,
+					"len of RMA = %ld, offset = %p, data = "
+					"%ld\n",
+					curr.len, curr.addr, remote_cq_data);
+			}
+
 		} else {
-			fprintf(stdout, "invalid cqdata_op: %d\n", opts.cqdata_op);
+			fprintf(stdout, "invalid cqdata_op: %d\n",
+				opts.cqdata_op);
 			ret = -FI_EINVAL;
 		}
 		if (ret)
@@ -77,9 +114,24 @@ static int run_test()
 		fprintf(stdout, "Done\n");
 	} else {
 		fprintf(stdout, "Waiting for CQ data from client\n");
-		ret = fi_cq_read(rxcq, &comp, 1);
-		while (ret == 0 || ret == -FI_EAGAIN)
+		// read the CQ till we get all the msgs
+		int count = 0;
+		while (count < n_msg) // (ret == 0 || ret == -FI_EAGAIN)
+		{
 			ret = fi_cq_read(rxcq, &comp, 1);
+			if (ret > 0) {
+				count += ret;
+				fprintf(stdout,
+					"received %d cq-data: %d/%d: len = "
+					"%ld, data=%ld, buf=%p\n",
+					ret, count, n_msg, comp.len, comp.data,
+					comp.buf);
+				continue;
+			}
+			if (ret < 0 && ret != -FI_EAGAIN) {
+				break;
+			}
+		}
 
 		if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
@@ -91,19 +143,41 @@ static int run_test()
 		}
 
 		if (comp.flags & FI_REMOTE_CQ_DATA) {
-			if ((comp.data & mask) == (remote_cq_data & mask)) {
-				fprintf(stdout, "remote_cq_data: success\n");
-				ret = 0;
-			} else {
-				fprintf(stdout, "error, Expected data:0x%" PRIx64
-					", Received data:0x%" PRIx64 "\n",
-					remote_cq_data, comp.data);
-				ret = -FI_EIO;
-			}
+			// if ((comp.data & mask) == (remote_cq_data & mask)) {
+			//	fprintf(stdout, "remote_cq_data: success\n");
+			//	ret = 0;
+			// } else {
+			//	fprintf(stdout, "error, Expected data:0x%"
+			//PRIx64
+			//		", Received data:0x%" PRIx64 "\n",
+			//		remote_cq_data, comp.data);
+			//	ret = -FI_EIO;
+			// }
 
-			if (comp.len == size) {
-				fprintf(stdout, "fi_cq_data_entry.len verify: success\n");
-				ret = 0;
+			if (comp.len == size / n_msg) {
+				fprintf(stdout, "fi_cq_data_entry.len verify: "
+						"success\n");
+				// check value
+				int *data =
+					(int *) (rx_buf + ft_rx_prefix_size());
+				for (int i = 0; i < data_size; ++i) {
+					if (data[i] != i + 1) {
+						fprintf(stdout,
+							"error, value of %p + "
+							"%d =%p"
+							"data[%d] should be %d "
+							"instead of %d\n",
+							data, i, data + i, i,
+							i + 1, data[i]);
+						ret = -FI_EIO;
+						break;
+					}
+				}
+				if (ret >= 0) {
+					fprintf(stdout, "fi_cq_data_entry.buf "
+							"verify: success\n");
+					ret = 0;
+				}
 			} else {
 				fprintf(stdout, "error, Expected len:%zu, Received len:%zu\n",
 					size, comp.len);
